@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -18,24 +21,44 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Query
+
+private data class ScanItem(val url: String, val level: String)
 
 @Composable
-fun HomeScreen(onSignOut: () -> Unit) {
+fun HomeScreen(
+    onCheck: () -> Unit,
+    onQr: () -> Unit,
+    onSms: () -> Unit,
+    onCall: () -> Unit,
+    onSignOut: () -> Unit
+) {
+    val context = LocalContext.current
     val user = FirebaseAuth.getInstance().currentUser
     var name by remember { mutableStateOf<String?>(null) }
+    var history by remember { mutableStateOf<List<ScanItem>>(emptyList()) }
 
-    // Read the saved name from Firestore: users/{uid}
+    // Read the saved name (users/{uid}) and the last 5 scans (users/{uid}/scans).
     LaunchedEffect(user?.uid) {
         val uid = user?.uid
         if (uid != null) {
-            FirebaseFirestore.getInstance()
-                .collection("users")
-                .document(uid)
+            CallCache.refresh(context)
+            val userDoc = FirebaseFirestore.getInstance().collection("users").document(uid)
+            userDoc.get().addOnSuccessListener { doc -> name = doc.getString("name") }
+            userDoc.collection("scans")
+                .orderBy("createdAt", Query.Direction.DESCENDING)
+                .limit(5)
                 .get()
-                .addOnSuccessListener { doc -> name = doc.getString("name") }
+                .addOnSuccessListener { snap ->
+                    history = snap.documents.map {
+                        ScanItem(it.getString("url") ?: "", it.getString("level") ?: "")
+                    }
+                }
         }
     }
 
@@ -43,6 +66,7 @@ fun HomeScreen(onSignOut: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .systemBarsPadding()
+            .verticalScroll(rememberScrollState())
             .padding(24.dp)
     ) {
         Text(
@@ -61,12 +85,28 @@ fun HomeScreen(onSignOut: () -> Unit) {
 
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Link and file checker", style = MaterialTheme.typography.titleMedium)
+                Text("Safety tools", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Coming next: check a link or file with VirusTotal and see if it is Safe, Suspicious or Dangerous.",
+                    "Check links, QR codes and text messages with VirusTotal, and get warned about reported scam callers.",
                     style = MaterialTheme.typography.bodyMedium
                 )
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = onCheck, modifier = Modifier.fillMaxWidth()) {
+                    Text("Check a link")
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = onQr, modifier = Modifier.fillMaxWidth()) {
+                    Text("Scan a QR code")
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = onSms, modifier = Modifier.fillMaxWidth()) {
+                    Text("Check an SMS")
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = onCall, modifier = Modifier.fillMaxWidth()) {
+                    Text("Call protection")
+                }
             }
         }
 
@@ -74,12 +114,21 @@ fun HomeScreen(onSignOut: () -> Unit) {
 
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Scan history", style = MaterialTheme.typography.titleMedium)
+                Text("Recent checks", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(4.dp))
-                Text(
-                    "Your past checks will appear here.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                if (history.isEmpty()) {
+                    Text("Your past checks will appear here.", style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    history.forEach { item ->
+                        Text(
+                            text = "${item.level} - ${item.url}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(Modifier.height(4.dp))
+                    }
+                }
             }
         }
 

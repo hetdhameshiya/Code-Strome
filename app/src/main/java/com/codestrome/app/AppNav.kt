@@ -36,11 +36,27 @@ fun AppNav() {
         }
         composable("home") {
             HomeScreen(
+                onCheck = { nav.navigate("check") },
+                onQr = { nav.navigate("qr") },
+                onSms = { nav.navigate("sms") },
+                onCall = { nav.navigate("call") },
                 onSignOut = {
                     FirebaseAuth.getInstance().signOut()
                     nav.navigate("login") { popUpTo("home") { inclusive = true } }
                 }
             )
+        }
+        composable("check") {
+            CheckScreen(autoScan = false, onBack = { nav.popBackStack() })
+        }
+        composable("qr") {
+            CheckScreen(autoScan = true, onBack = { nav.popBackStack() })
+        }
+        composable("sms") {
+            SmsScreen(onBack = { nav.popBackStack() })
+        }
+        composable("call") {
+            CallScreen(onBack = { nav.popBackStack() })
         }
     }
 }
